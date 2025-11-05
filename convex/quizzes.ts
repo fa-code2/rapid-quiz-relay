@@ -18,6 +18,7 @@ export const createQuiz = mutation({
         option_d: v.string(),
         correct_answer: v.string(),
         time_limit: v.number(),
+        order_number: v.number(),
       })
     ),
   },
@@ -45,7 +46,7 @@ export const createQuiz = mutation({
         option_d: q.option_d || undefined,
         correct_answer: q.correct_answer,
         time_limit: q.time_limit,
-        order_number: i,
+        order_number: q.order_number,
       });
     }
 
