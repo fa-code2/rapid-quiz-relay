@@ -8,8 +8,11 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
 import type * as gameplay from "../gameplay.js";
+import type * as http from "../http.js";
 import type * as quizzes from "../quizzes.js";
+import type * as router from "../router.js";
 import type * as sessions from "../sessions.js";
 
 import type {
@@ -27,8 +30,11 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
   gameplay: typeof gameplay;
+  http: typeof http;
   quizzes: typeof quizzes;
+  router: typeof router;
   sessions: typeof sessions;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
