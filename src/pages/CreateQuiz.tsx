@@ -13,11 +13,9 @@ import { api } from "../../convex/_generated/api"; // <-- 2. Add this import
 type Question = {
   question_text: string;
   question_image_url: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_answer: string;
+  // dynamic options stored in an array (min 2)
+  options: string[];
+  correct_answer: string; // letter like 'A', 'B', ...
   time_limit: number;
   order_number: number;
 };
@@ -32,10 +30,7 @@ const CreateQuiz = () => {
     {
       question_text: "",
       question_image_url: "",
-      option_a: "",
-      option_b: "",
-      option_c: "",
-      option_d: "",
+      options: ["", ""], // start with two mandatory options
       correct_answer: "A",
       time_limit: 30,
       order_number: 0
@@ -45,18 +40,37 @@ const CreateQuiz = () => {
   // <-- 3. Get the mutation function
   const createQuizMutation = useMutation(api.quizzes.createQuiz);
 
+  // Time options (seconds) for the select
+  const TIME_OPTIONS: { label: string; value: number }[] = [
+    { label: "5 secs", value: 5 },
+    { label: "10 secs", value: 10 },
+    { label: "15 secs", value: 15 },
+    { label: "20 secs", value: 20 },
+    { label: "25 secs", value: 25 },
+    { label: "30 secs", value: 30 },
+    { label: "45 secs", value: 45 },
+    { label: "50 secs", value: 50 },
+    { label: "1 min", value: 60 },
+    { label: "1 min 30 secs", value: 90 },
+    { label: "2 min", value: 120 },
+    { label: "3 min", value: 180 },
+    { label: "5 min", value: 300 },
+    { label: "7 min", value: 420 },
+    { label: "10 min", value: 600 },
+  ];
+
   const addQuestion = () => {
-    setQuestions([...questions, {
-      question_text: "",
-      question_image_url: "",
-      option_a: "",
-      option_b: "",
-      option_c: "",
-      option_d: "",
-      correct_answer: "A",
-      time_limit: 30,
-      order_number: questions.length
-    }]);
+    setQuestions([
+      ...questions,
+      {
+        question_text: "",
+        question_image_url: "",
+        options: ["", ""],
+        correct_answer: "A",
+        time_limit: 30,
+        order_number: questions.length,
+      },
+    ]);
   };
 
   const removeQuestion = (index: number) => {
@@ -71,24 +85,85 @@ const CreateQuiz = () => {
     setQuestions(updated);
   };
 
+  const updateOption = (qIndex: number, optIndex: number, value: string) => {
+    const updated = [...questions];
+    const opts = [...updated[qIndex].options];
+    opts[optIndex] = value;
+    updated[qIndex] = { ...updated[qIndex], options: opts };
+    setQuestions(updated);
+  };
+
+  const addOption = (qIndex: number) => {
+    const updated = [...questions];
+    const opts = [...updated[qIndex].options, ""];
+    updated[qIndex] = { ...updated[qIndex], options: opts };
+    setQuestions(updated);
+  };
+
+  const removeOption = (qIndex: number, optIndex: number) => {
+    const updated = [...questions];
+    const opts = [...updated[qIndex].options];
+    if (opts.length <= 2) return; // enforce minimum 2 options
+    opts.splice(optIndex, 1);
+    // if the removed option was before the correct answer, shift correct_answer
+    const letters = opts.map((_, i) => String.fromCharCode(65 + i));
+    let correct = updated[qIndex].correct_answer;
+    if (!letters.includes(correct)) correct = letters[0] || "A";
+    updated[qIndex] = { ...updated[qIndex], options: opts, correct_answer: correct };
+    setQuestions(updated);
+  };
+
   const createQuiz = async () => {
     if (!title.trim()) {
       toast({ title: "Error", description: "Please enter a quiz title", variant: "destructive" });
       return;
     }
 
-    if (questions.some(q => !q.question_text.trim() || !q.option_a.trim() || !q.option_b.trim())) {
-      toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
-      return;
+    // Validate required fields and at least two options per question
+    for (const q of questions) {
+      if (!q.question_text.trim()) {
+        toast({ title: "Error", description: "Please fill in all required fields", variant: "destructive" });
+        return;
+      }
+      if (!q.options[0]?.trim() || !q.options[1]?.trim()) {
+        toast({ title: "Error", description: "Each question needs at least two options", variant: "destructive" });
+        return;
+      }
+      // ensure correct_answer is within available options
+      const letters = q.options.map((_, i) => String.fromCharCode(65 + i));
+      if (!letters.includes(q.correct_answer)) {
+        toast({ title: "Error", description: "Correct answer must match an available option", variant: "destructive" });
+        return;
+      }
     }
 
     setLoading(true);
     try {
       // <-- 4. Call the mutation correctly
+      // Map dynamic options into the shape expected by the backend.
+      // Backend currently expects fields like option_a, option_b, option_c, option_d.
+      // We'll map the first N options to option_{letter} keys (option_a, option_b, ...)
+      const mappedQuestions = questions.map((q) => {
+        const mapped: any = {
+          question_text: q.question_text,
+          question_image_url: q.question_image_url || undefined,
+          correct_answer: q.correct_answer,
+          time_limit: q.time_limit,
+          order_number: q.order_number,
+        };
+
+        q.options.forEach((opt, i) => {
+          const letter = String.fromCharCode(97 + i); // 'a', 'b', 'c', ...
+          mapped[`option_${letter}`] = opt;
+        });
+
+        return mapped;
+      });
+
       const quizId = await createQuizMutation({
         title,
         description,
-        questions,
+        questions: mappedQuestions,
       });
 
       toast({ title: "Success!", description: "Quiz created successfully" });
@@ -188,42 +263,43 @@ const CreateQuiz = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Option A *</Label>
-                      <Input
-                        value={question.option_a}
-                        onChange={(e) => updateQuestion(index, 'option_a', e.target.value)}
-                        placeholder="First option"
-                        className="mt-2"
-                      />
-                    </div>
-                    <div>
-                      <Label>Option B *</Label>
-                      <Input
-                        value={question.option_b}
-                        onChange={(e) => updateQuestion(index, 'option_b', e.target.value)}
-                        placeholder="Second option"
-                        className="mt-2"
-                      />
-                    </div>
-                    <div>
-                      <Label>Option C</Label>
-                      <Input
-                        value={question.option_c}
-                        onChange={(e) => updateQuestion(index, 'option_c', e.target.value)}
-                        placeholder="Third option (optional)"
-                        className="mt-2"
-                      />
-                    </div>
-                    <div>
-                      <Label>Option D</Label>
-                      <Input
-                        value={question.option_d}
-                        onChange={(e) => updateQuestion(index, 'option_d', e.target.value)}
-                        placeholder="Fourth option (optional)"
-                        className="mt-2"
-                      />
+                  <div className="space-y-3">
+                    {question.options.map((opt, optIndex) => {
+                      const letter = String.fromCharCode(65 + optIndex); // A, B, C...
+                      return (
+                        <div key={optIndex} className="flex items-start gap-3">
+                          <div className="w-full">
+                            <Label>{`Option ${letter}${optIndex < 2 ? ' *' : ''}`}</Label>
+                            <Input
+                              value={opt}
+                              onChange={(e) => updateOption(index, optIndex, e.target.value)}
+                              placeholder={`Option ${letter}`}
+                              className="mt-2"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            {/* spacer for layout - option text already inline */}
+                          </div>
+                          <div className="mt-6">
+                            {question.options.length > 2 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeOption(index, optIndex)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="pt-2">
+                      <Button onClick={() => addOption(index)} size="sm" className="rounded-full">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Option
+                      </Button>
                     </div>
                   </div>
 
@@ -235,22 +311,25 @@ const CreateQuiz = () => {
                         onChange={(e) => updateQuestion(index, 'correct_answer', e.target.value)}
                         className="w-full mt-2 p-2 border rounded-md pr-3"
                       >
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
+                        {question.options.map((_, i) => {
+                          const letter = String.fromCharCode(65 + i);
+                          return (
+                            <option key={i} value={letter}>{letter}</option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div>
-                      <Label>Time Limit (seconds) *</Label>
-                      <Input
-                        type="number"
+                      <Label>Time Limit *</Label>
+                      <select
                         value={question.time_limit}
-                        onChange={(e) => updateQuestion(index, 'time_limit', parseInt(e.target.value) || 30)}
-                        min={5}
-                        max={300}
-                        className="mt-2"
-                      />
+                        onChange={(e) => updateQuestion(index, 'time_limit', parseInt(e.target.value))}
+                        className="w-full mt-2 p-2 border rounded-md pr-3"
+                      >
+                        {TIME_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

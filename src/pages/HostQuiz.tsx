@@ -14,6 +14,7 @@ const HostQuiz = () => {
   const { toast } = useToast();
   const [timeLeft, setTimeLeft] = useState(0);
   const [timerStarted, setTimerStarted] = useState(false);
+  const [revealAnswerState, setRevealAnswerState] = useState(false);
 
   // 4. Get all data from one real-time query
   const sessionData = useQuery(
@@ -32,6 +33,17 @@ const HostQuiz = () => {
   const questions = sessionData?.questions;
   const participants = sessionData?.participants;
   const currentQuestion = sessionData?.currentQuestion;
+  // Build an array of options dynamically from fields like option_a, option_b, option_c, ...
+  const options = currentQuestion
+    ? Object.keys(currentQuestion)
+        .filter((k) => k.startsWith("option_"))
+        .sort()
+        .map((k) => {
+          const letter = k.replace("option_", "").toUpperCase();
+          return { key: letter, text: (currentQuestion as any)[k] };
+        })
+        .filter((o) => o.text)
+    : [];
 
   // Timer logic
   useEffect(() => {
@@ -53,6 +65,11 @@ const HostQuiz = () => {
       showLeaderboard();
     }
   }, [timeLeft, session?.status, currentQuestion, session?.show_leaderboard,timerStarted]);
+
+  // Reset reveal state whenever the current question changes
+  useEffect(() => {
+    setRevealAnswerState(false);
+  }, [currentQuestion?._id]);
 
 
   // 6. Hook up mutations
@@ -175,24 +192,31 @@ const HostQuiz = () => {
                 )}
               </div>
 
+              <div className="flex justify-end mb-2">
+                <Button
+                  onClick={() => setRevealAnswerState((r) => !r)}
+                  size="sm"
+                  variant={revealAnswerState ? undefined : "outline"}
+                >
+                  {revealAnswerState ? "Hide Answer" : "Reveal Answer"}
+                </Button>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 text-primary-glow">
-                {['A', 'B', 'C', 'D'].map(option => {
-                  const optionText = currentQuestion[`option_${option.toLowerCase()}`];
-                  if (!optionText) return null;
-                  
+                {options.map(({ key: option, text: optionText }) => {
                   const colors = {
-                    A: 'from-white border border-gray-300 to-gray-100',
-                    B: 'from-white border border-gray-300 to-gray-100',
-                    C: 'from-white border border-gray-300 to-gray-100',
-                    D: 'from-white border border-gray-300 to-gray-100'
-                  };
+                    // default styling; admin can decide colors later
+                    default: 'from-white border border-gray-300 to-gray-100'
+                  } as Record<string, string>;
+
+                  const isCorrect = revealAnswerState && currentQuestion?.correct_answer === option;
 
                   return (
-                    <div 
+                    <div
                       key={option}
-                      className={`p-4 rounded-xl bg-gradient-to-br ${colors[option as keyof typeof colors]} text-primary-glow`}
+                      className={`p-4 rounded-xl bg-gradient-to-br ${colors.default} text-primary-glow flex items-center justify-start gap-4 transition-all duration-200 ${isCorrect ? 'ring-4 ring-success/50 bg-success/10 border-success scale-105' : ''}`}
                     >
-                      <span className="w-16 rounded-full p-2 bg-accent text-xl font-bold mr-3 ">{option}</span>
+                      <span className="w-16 rounded-full p-2 bg-accent text-xl font-bold text-center">{option}</span>
                       <span className="text-xl">{optionText}</span>
                     </div>
                   );
