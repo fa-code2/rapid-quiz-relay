@@ -11,11 +11,11 @@ export const createQuiz = mutation({
     questions: v.array(
       v.object({
         question_text: v.string(),
-        question_image_url: v.string(),
+        question_image_url: v.optional(v.string()), // <-- FIXED
         option_a: v.string(),
         option_b: v.string(),
-        option_c: v.string(),
-        option_d: v.string(),
+        option_c: v.optional(v.string()), // <-- FIXED
+        option_d: v.optional(v.string()), // <-- FIXED
         correct_answer: v.string(),
         time_limit: v.number(),
         order_number: v.number(),
