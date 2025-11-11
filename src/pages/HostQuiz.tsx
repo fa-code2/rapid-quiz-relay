@@ -1,3 +1,5 @@
+// src/pages/HostQuiz.tsx
+
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,7 @@ const HostQuiz = () => {
   const [timeLeft, setTimeLeft] = useState(0);
   const [timerStarted, setTimerStarted] = useState(false);
   const [revealAnswerState, setRevealAnswerState] = useState(false);
-  const [showLeaderboardState, setShowLeaderboardState] = useState(false);
+  // const [showLeaderboardState, setShowLeaderboardState] = useState(false); // <-- REMOVED
 
   // 4. Get all data from one real-time query
   const sessionData = useQuery(
@@ -62,10 +64,11 @@ const HostQuiz = () => {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
     } else if (timerStarted && timeLeft === 0 && session?.status === 'active' && currentQuestion && !session.show_leaderboard) {
-      // Time's up! Automatically show leaderboard
-      showLeaderboard();
+      // MODIFIED: Time's up! Just show a toast, don't auto-advance.
+      toast({ title: "Time's up!", description: "Players can no longer answer. Click 'Show Leaderboard' or 'Next'."});
+      setTimerStarted(false); // Prevent toast from firing repeatedly
     }
-  }, [timeLeft, session?.status, currentQuestion, session?.show_leaderboard,timerStarted]);
+  }, [timeLeft, session?.status, currentQuestion, session?.show_leaderboard, timerStarted, toast]); // Added toast
 
   // Reset reveal state whenever the current question changes
   useEffect(() => {
@@ -98,6 +101,19 @@ const HostQuiz = () => {
       await nextQuestionMutation({ sessionId: sessionId as Id<"quiz_sessions"> });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // ADDED: New handler for the leaderboard button
+  const handleShowLeaderboardClick = () => {
+    if (!questions || !session) return;
+    
+    if (session.current_question_index === questions.length - 1) {
+      // This is the last question. Go straight to final results.
+      nextQuestion();
+    } else {
+      // Not the last question. Show the per-question leaderboard.
+      showLeaderboard();
     }
   };
 
@@ -193,6 +209,7 @@ const HostQuiz = () => {
                 )}
               </div>
 
+              {/* --- MODIFIED BUTTON GROUP --- */}
               <div className="flex gap-2 justify-end mb-2">
                 <Button
                   onClick={() => setRevealAnswerState((r) => !r)}
@@ -202,13 +219,22 @@ const HostQuiz = () => {
                 Reveal Answer
                 </Button>
                 <Button
-                  onClick={() => setShowLeaderboardState((r) => !r)}
+                  onClick={handleShowLeaderboardClick} // <-- Use new handler
                   size="sm"
-                  variant={showLeaderboardState ? undefined : "outline"}
+                  variant="outline" // <-- Removed dependency on local state
                 >
                  Show Leaderboard
                 </Button>
+                <Button
+                  onClick={nextQuestion} // <-- Added this button
+                  size="sm"
+                >
+                  Next
+                  <SkipForward className="h-4 w-4" />
+                </Button>
               </div>
+              {/* --- END MODIFIED BUTTON GROUP --- */}
+
 
               <div className="grid grid-cols-1 gap-4 text-primary-glow">
                 {options.map(({ key: option, text: optionText }) => {
