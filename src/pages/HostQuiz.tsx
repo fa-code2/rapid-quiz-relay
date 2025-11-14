@@ -78,7 +78,7 @@ const HostQuiz = () => {
     session?.status, 
     session?.show_leaderboard, 
     session?.currentQuestionEndTime,
-    currentQuestion, // Added dependency
+    currentQuestion?.time_limit,// Added dependency
     toast
   ]);
   // --- END FIX ---
