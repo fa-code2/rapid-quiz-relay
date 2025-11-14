@@ -15,9 +15,7 @@ const HostQuiz = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [timeLeft, setTimeLeft] = useState(0);
-  const [timerStarted, setTimerStarted] = useState(false);
-  // reveal state is managed on the server (session.reveal_answer); UI will read from session
-  // const [showLeaderboardState, setShowLeaderboardState] = useState(false); // <-- REMOVED
+  // const [timerStarted, setTimerStarted] = useState(false); // <-- REMOVED
 
   // 4. Get all data from one real-time query
   const sessionData = useQuery(
@@ -46,28 +44,36 @@ const HostQuiz = () => {
         .filter((o) => o.text)
     : [];
 
-  // Timer logic
+  // --- REPLACED TIMER LOGIC ---
   useEffect(() => {
-    const questionId = currentQuestion?._id;
-    // Initialize timer only when the question id actually changes (avoid resets on unrelated session updates)
-    if (session?.status === 'active' && !session.show_leaderboard && questionId) {
-      setTimeLeft(currentQuestion.time_limit);
-      setTimerStarted(true);
-    } else {
-      setTimerStarted(false);
-    }
-  }, [currentQuestion?._id, session?.status, session?.show_leaderboard]);
+    if (session?.status === 'active' && !session.show_leaderboard && session.currentQuestionEndTime) {
+      
+      const updateTimer = () => {
+        const now = Date.now();
+        const remainingMs = session.currentQuestionEndTime! - now;
+        const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+        
+        setTimeLeft(remainingSeconds);
 
-  useEffect(() => {
-    if (timeLeft > 0 && session?.status === 'active' && !session.show_leaderboard) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (timerStarted && timeLeft === 0 && session?.status === 'active' && currentQuestion && !session.show_leaderboard) {
-      // MODIFIED: Time's up! Just show a toast, don't auto-advance.
-      toast({ title: "Time's up!", description: "Players can no longer answer. Click 'Show Leaderboard' or 'Next'."});
-      setTimerStarted(false); // Prevent toast from firing repeatedly
+        if (remainingSeconds === 0) {
+          toast({ title: "Time's up!", description: "Players can no longer answer. Click 'Show Leaderboard' or 'Next'."});
+        }
+      };
+
+      updateTimer(); // Initial call
+      const timer = setInterval(updateTimer, 1000); // 1-second interval
+
+      // Cleanup interval
+      return () => clearInterval(timer);
+      
     }
-  }, [timeLeft, session?.status, currentQuestion?._id, session?.show_leaderboard, timerStarted, toast]); // Added toast
+  }, [
+    session?.status, 
+    session?.show_leaderboard, 
+    session?.currentQuestionEndTime, 
+    toast
+  ]);
+  // --- END REPLACED TIMER LOGIC ---
 
   // reveal state is controlled by the session (server). No local reset needed here.
   const showLeaderboardMutation = useMutation(api.gameplay.showLeaderboard);

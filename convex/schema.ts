@@ -41,8 +41,11 @@ export default defineSchema({
     current_question_index: v.number(),
     show_leaderboard: v.boolean(),
     // Optional flag to indicate that the host has revealed the correct answer
-    // This is optional so existing documents without this field will still be valid
     reveal_answer: v.optional(v.boolean()),
+
+    currentQuestionStartTime: v.optional(v.number()),
+    currentQuestionEndTime: v.optional(v.number()),
+
   }).index("by_join_code", ["join_code"]), // For players joining
 
   // 'participants' table for players

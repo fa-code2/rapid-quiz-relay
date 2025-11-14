@@ -22,8 +22,30 @@ export const startQuiz = mutation({
     // hostId removed from args
   },
   handler: async (ctx, args) => {
-    await checkHost(ctx, args.sessionId); // Security check (now just checks for session existence)
-    await ctx.db.patch(args.sessionId, { status: "active" });
+    const session = await checkHost(ctx, args.sessionId); // Security check (now just checks for session existence)
+    
+    // --- ADDED BLOCK ---
+    // Get the first question to set the timer
+    const firstQuestion = await ctx.db
+      .query("questions")
+      .withIndex("by_quizId_order", (q) => q.eq("quizId", session.quizId))
+      .order("asc")
+      .first();
+
+    if (!firstQuestion) {
+      throw new Error("No questions found for this quiz.");
+    }
+
+    const timeLimitMs = firstQuestion.time_limit * 1000;
+    const startTime = Date.now();
+    const endTime = startTime + timeLimitMs;
+    
+    await ctx.db.patch(args.sessionId, { 
+      status: "active",
+      currentQuestionStartTime: startTime,
+      currentQuestionEndTime: endTime,
+    });
+    // --- END BLOCK ---
   },
 });
 
@@ -58,15 +80,30 @@ export const nextQuestion = mutation({
 
     if (nextIndex >= questions.length) {
       // End of quiz
-      await ctx.db.patch(args.sessionId, { status: "finished" });
+      await ctx.db.patch(args.sessionId, { 
+        status: "finished",
+        // --- ADDED ---
+        currentQuestionStartTime: undefined,
+        currentQuestionEndTime: undefined,
+        // --- END ADDED ---
+      });
     } else {
-      // Move to next question
+      // --- MODIFIED BLOCK ---
+      // Move to next question and set its timers
+      const nextQuestion = questions[nextIndex];
+      const timeLimitMs = nextQuestion.time_limit * 1000;
+      const startTime = Date.now();
+      const endTime = startTime + timeLimitMs;
+
       await ctx.db.patch(args.sessionId, {
         current_question_index: nextIndex,
         show_leaderboard: false,
         // Reset any revealed-answer flag when moving to the next question
         reveal_answer: false,
+        currentQuestionStartTime: startTime, // Set new start time
+        currentQuestionEndTime: endTime,     // Set new end time
       });
+      // --- END MODIFIED BLOCK ---
     }
   },
 });
@@ -98,6 +135,15 @@ export const submitAnswer = mutation({
   handler: async (ctx, args) => {
     const { participantId, questionId, sessionId, answer, time_taken } = args;
 
+    // --- ADDED SERVER-SIDE TIME VALIDATION ---
+    const session = await ctx.db.get(sessionId);
+    if (!session) throw new Error("Session not found.");
+    
+    const isLate = session.currentQuestionEndTime 
+                   ? Date.now() > session.currentQuestionEndTime 
+                   : false;
+    // --- END VALIDATION BLOCK ---
+
     // 1. Check if already answered
     const existingAnswer = await ctx.db
       .query("answers")
@@ -116,15 +162,10 @@ export const submitAnswer = mutation({
       throw new Error("Question not found");
     }
 
-    const is_correct = question.correct_answer === answer;
-    let score = 0;
-
     // 3. Calculate score
-    if (is_correct) {
-      score = 1;
-    } else {
-      score = 0;
-    }
+    // If they are late, the answer is incorrect, regardless of what they submitted.
+    const is_correct = !isLate && question.correct_answer === answer;
+    let score = is_correct ? 1 : 0;
 
     // 4. Save the answer
     await ctx.db.insert("answers", {

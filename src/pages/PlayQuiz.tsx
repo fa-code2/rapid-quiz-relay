@@ -1,3 +1,4 @@
+// src/pages/PlayQuiz.tsx
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -40,26 +41,50 @@ const PlayQuiz = () => {
   const answerStats = sessionData?.answerStats;
   const hasAnswered = sessionData?.hasAnswered;
 
-  // Timer logic
+  // --- REPLACED TIMER LOGIC ---
   useEffect(() => {
-    const questionId = currentQuestion?._id;
-    // Start a new timer only when the question id changes (prevents resets on unrelated updates)
-    if (session?.status === 'active' && !session.show_leaderboard && questionId) {
-      setTimeLeft(currentQuestion.time_limit);
-      setSelectedAnswer(null); // Clear previous selection
-    }
-  }, [currentQuestion?._id, session?.status, session?.show_leaderboard]);
+    // This effect now has two jobs:
+    // 1. Set the initial time left based on the server's end time.
+    // 2. Run the 1-second interval countdown.
 
-  useEffect(() => {
-    if (timeLeft > 0 && session?.status === 'active' && !session.show_leaderboard && !hasAnswered) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && session?.status === 'active' && !hasAnswered && currentQuestion) {
-      // Time's up! Automatically submit a "null" answer (or just lock)
-      // For this app, we'll just prevent further answers
-      toast({ title: "Time's up!", description: "Waiting for next question."});
+    if (session?.status === 'active' && !session.show_leaderboard && session.currentQuestionEndTime && !hasAnswered) {
+      
+      // 1. Calculate initial time remaining
+      const updateTimer = () => {
+        const now = Date.now();
+        const remainingMs = session.currentQuestionEndTime! - now;
+        const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+        
+        setTimeLeft(remainingSeconds);
+
+        if (remainingSeconds === 0 && !hasAnswered) {
+          toast({ title: "Time's up!", description: "Waiting for next question."});
+        }
+      };
+
+      // Set initial time immediately
+      updateTimer();
+
+      // 2. Start the 1-second interval
+      // We use an interval that re-calculates against the end time
+      // to prevent client-side clock drift.
+      const timer = setInterval(updateTimer, 1000);
+
+      // Cleanup interval on change
+      return () => clearInterval(timer);
+      
+    } else if (hasAnswered) {
+      // If answered, just show 0
+      setTimeLeft(0);
     }
-  }, [timeLeft, session?.status, hasAnswered, currentQuestion?._id]);
+  }, [
+    session?.status, 
+    session?.show_leaderboard, 
+    session?.currentQuestionEndTime, 
+    hasAnswered, 
+    toast
+  ]);
+  // --- END REPLACED TIMER LOGIC ---
 
   const handleOptionSelect = (option: string) => {
     if (hasAnswered || timeLeft === 0) return;
@@ -69,6 +94,12 @@ const PlayQuiz = () => {
   const submitAnswer = async () => {
     if (hasAnswered || !selectedAnswer || !currentQuestion || !sessionId || !participantId) return;
 
+    // --- MODIFIED TIME_TAKEN CALCULATION ---
+    const time_taken = session.currentQuestionStartTime 
+      ? (Date.now() - session.currentQuestionStartTime) / 1000 
+      : currentQuestion.time_limit; // fallback
+    // --- END MODIFICATION ---
+
     try {
       // 6. Call the mutation
       await submitAnswerMutation({
@@ -76,7 +107,7 @@ const PlayQuiz = () => {
         questionId: currentQuestion._id, 
         sessionId: sessionId as Id<"quiz_sessions">,
         answer: selectedAnswer,
-        time_taken: currentQuestion.time_limit - timeLeft 
+        time_taken: time_taken // Use our new calculation
       });
       
       toast({ title: "Answer submitted!" });
