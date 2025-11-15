@@ -36,7 +36,7 @@ const PlayQuiz = () => {
   const currentQuestion = sessionData?.currentQuestion;
   const answerStats = sessionData?.answerStats;
   const hasAnswered = sessionData?.hasAnswered;
-
+  const submittedAnswer = sessionData?.submittedAnswer;
   // --- START FIX ---
   // 1. Initialize to a simple default value.
   const [timeLeft, setTimeLeft] = useState(30);
@@ -46,6 +46,14 @@ const PlayQuiz = () => {
     // When the question ID changes, reset the local selected answer state
     setSelectedAnswer(null);
   }, [currentQuestion?._id]);
+  // This effect runs when the data (re)loads from the server
+  useEffect(() => {
+    // If the server says we've answered, update our local state
+    // to match the answer we submitted.
+    if (hasAnswered && submittedAnswer) {
+      setSelectedAnswer(submittedAnswer);
+    }
+  }, [hasAnswered, submittedAnswer]);
   
   // 3. This effect manages the timer logic based on the session state.
   useEffect(() => {

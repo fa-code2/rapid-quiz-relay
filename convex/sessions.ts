@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server"; // Correct helper for Convex Auth
+import { Doc } from "./_generated/dataModel";
 
 // Helper function to generate a 6-character join code
 const generateJoinCode = () => {
@@ -170,12 +171,13 @@ export const getPlayerSessionData = query({
 
       let answerStats: Record<string, number> = {};
       let hasAnswered = false;
+      let answerDoc: Doc<"answers"> | null = null;
 
       // Map of participantId -> score awarded for the current question (if any)
       const currentQuestionScores: Record<string, number> = {};
 
       if (currentQuestion) {
-        const answerDoc = await ctx.db
+           answerDoc = await ctx.db
           .query("answers")
           .withIndex("by_participant_question", (q) =>
             q.eq("participantId", args.participantId).eq("questionId", currentQuestion._id)
@@ -231,7 +233,7 @@ export const getPlayerSessionData = query({
       allParticipants: visibleParticipants,
       currentQuestion,
       answerStats,
-      hasAnswered,
+      submittedAnswer: answerDoc?.answer || null,
     };
   },
 });
