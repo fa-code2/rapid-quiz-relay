@@ -62,6 +62,29 @@ export const createSession = mutation({
   },
 });
 
+// Lookup a session by join code. This is a minimal, read-only query
+// used by clients to determine whether a session is still accepting
+// players (status === 'waiting') or has already started (start time set).
+export const getSessionByJoinCode = query({
+  args: { join_code: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("quiz_sessions")
+      .withIndex("by_join_code", (q) => q.eq("join_code", args.join_code.toUpperCase()))
+      .first();
+
+    if (!session) return null;
+
+    // Return only the minimal fields the client needs to decide
+    // whether joining is allowed.
+    return {
+      _id: session._id,
+      status: session.status,
+      currentQuestionStartTime: session.currentQuestionStartTime ?? null,
+      currentQuestionEndTime: session.currentQuestionEndTime ?? null,
+    };
+  },
+});
 // ---------------------------
 // 🎮 PLAYER: Join Session (Public)
 // ---------------------------

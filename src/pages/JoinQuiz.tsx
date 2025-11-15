@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useMutation } from "convex/react"; // 1. Import useMutation
+import { useMutation, useQuery } from "convex/react"; // 1. Import useMutation + useQuery
 import { api } from "../../convex/_generated/api"; // 2. Import api
 
 const JoinQuiz = () => {
@@ -18,6 +18,11 @@ const JoinQuiz = () => {
 
   // 3. Get the joinSession mutation
   const joinSessionMutation = useMutation(api.sessions.joinSession);
+  // Lightweight session preview (lookup by join code). We cast `api.sessions`
+  // to `any` because the generated `api` types may be out of date; this is
+  // safe at runtime and keeps the code compile-time friendly until you
+  // regenerate Convex types (e.g. `npx convex dev`).
+  const sessionPreview = useQuery((api.sessions as any).getSessionByJoinCode, code ? { join_code: code.toUpperCase() } : "skip");
 
   const joinQuiz = async () => {
     if (!code.trim() || !name.trim()) {
@@ -31,30 +36,31 @@ const JoinQuiz = () => {
 
     setLoading(true);
     try {
-      // 4. Call the mutation
+      // If we have a quick session preview available, use it to decide
+      // whether the quiz is accepting new players. This avoids relying on
+      // error message text from the server.
+      if (sessionPreview !== undefined && sessionPreview !== null) {
+        // If the session is not in 'waiting' state or the host has already
+        // set the question start time, treat it as started and refuse joins.
+        if (sessionPreview.status !== "waiting" || sessionPreview.currentQuestionStartTime) {
+          toast({ title: "Failed to Join", description: "Quiz has already started.", variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 4. Call the mutation (fallback: server will still validate the join code)
       const { sessionId, participantId } = await joinSessionMutation({
         join_code: code.toUpperCase(),
         name: name,
       });
-      
+
       // 5. Navigate to the play screen on success
       navigate(`/play/${sessionId}?participant=${participantId}`);
 
-  } catch (error: any) {
-      // If the session has already started, the server throws a message indicating
-      // the quiz is no longer accepting new players. Show a clearer toast in that case.
-      const serverMessage = error?.message ? String(error.message) : "";
-      let description = "An unknown error occured."; // intentionally the user's spelling
-
-      if (/no longer accepting/i.test(serverMessage) || /already started/i.test(serverMessage)) {
-        description = "Quiz has already started.";
-      }
-
-      toast({ 
-        title: "Failed to Join", 
-        description,
-        variant: "destructive" 
-      });
+    } catch (error: any) {
+      // For any other client/server errors, show a generic message.
+      toast({ title: "Failed to Join", description: "An unknown error has occurred.", variant: "destructive" });
     } finally {
       setLoading(false);
     }

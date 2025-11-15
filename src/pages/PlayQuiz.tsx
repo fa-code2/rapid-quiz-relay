@@ -35,8 +35,12 @@ const PlayQuiz = () => {
   const allParticipants = sessionData?.allParticipants;
   const currentQuestion = sessionData?.currentQuestion;
   const answerStats = sessionData?.answerStats;
-  const hasAnswered = sessionData?.hasAnswered;
-  const submittedAnswer = sessionData?.submittedAnswer;
+  // The Convex generated types may be out-of-date; access these fields
+  // via a safe `any` cast so TypeScript won't complain while runtime
+  // behavior remains unchanged. If you regenerate Convex types
+  // (e.g. `npx convex dev`) these casts can be removed.
+  const hasAnswered = (sessionData as any)?.hasAnswered ?? false;
+  const submittedAnswer = (sessionData as any)?.submittedAnswer ?? null;
   // --- START FIX ---
   // 1. Initialize to a simple default value.
   const [timeLeft, setTimeLeft] = useState(30);
